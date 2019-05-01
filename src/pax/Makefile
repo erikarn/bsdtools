@@ -9,13 +9,13 @@ SRCS=	ar_io.c ar_subs.c buf_subs.c file_subs.c ftree.c\
 	tar.c tty_subs.c
 
 .if defined(SMALLPROG)
-CPPFLAGS+=	-DSMALL -DNO_CPIO
+CFLAGS+=	-DSMALL -DNO_CPIO
 .else
 SRCS+=		getid.c spec.c misc.c pack_dev.c cpio.c
-CPPFLAGS+=	-I${NETBSDSRCDIR}/usr.sbin/mtree \
-		-I${NETBSDSRCDIR}/sbin/mknod
-.PATH:		${NETBSDSRCDIR}/usr.sbin/mtree \
-		${NETBSDSRCDIR}/sbin/mknod
+CFLAGS+=	-I../mtree/ \
+		-I../mknod
+.PATH:		../mtree \
+		../mknod
 
 .if (${HOSTPROG:U} == "")
 DPADD+= ${LIBUTIL}
