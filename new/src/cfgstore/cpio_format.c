@@ -24,7 +24,7 @@
  * 6	namesize	length of file name
  * 11	filesize	length of file to follow
  *
- * Finally, the final file in the archive is an empty file named TRAILER!! .
+ * Finally, the final file in the archive is an empty file named TRAILER!!! .
  */
 
 /*
@@ -88,7 +88,7 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 		c->st.st_nlink & 0x3ffff,
 		c->st.st_rdev & 0x3ffff,
 		((unsigned long long) (c->st.st_mtime)) & 0x1ffffffffULL,
-		((unsigned long long) strlen(c->filename)) & 0x3ffff,
+		((unsigned long long) strlen(c->filename) + 1) & 0x3ffff,
 		((unsigned long long) (c->st.st_size)) & 0x1ffffffffULL);
 
 	/*
@@ -108,12 +108,12 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 		warn("%s; short write", __func__);
 		return (-1);
 	}
-	/* Now write the filename; it's part of the header */
-	r = write(fd, c->filename, strlen(c->filename));
+	/* Now write the filename + trailing NUL; it's part of the header */
+	r = write(fd, c->filename, strlen(c->filename) + 1);
 	if (r == 0) {
 		return (0);
 	}
-	if (r != strlen(c->filename)) {
+	if (r != strlen(c->filename) + 1) {
 		warn("%s: short write", __func__);
 		return (-1);
 	}
