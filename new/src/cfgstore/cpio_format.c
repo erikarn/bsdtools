@@ -27,11 +27,8 @@
  * Finally, the final file in the archive is an empty file named TRAILER!!! .
  */
 
-/*
- * Create a cpio_header with the given filename and stat.
- */
-struct cpio_header *
-cpio_header_create(struct stat *st, const char *fn)
+static struct cpio_header *
+cpio_header_allocate(void)
 {
 	struct cpio_header *c;
 
@@ -40,6 +37,21 @@ cpio_header_create(struct stat *st, const char *fn)
 		warn("%s: calloc", __func__);
 		return (NULL);
 	}
+	return (c);
+}
+
+/*
+ * Create a cpio_header with the given filename and stat.
+ */
+struct cpio_header *
+cpio_header_create(struct stat *st, const char *fn)
+{
+	struct cpio_header *c;
+
+	c = cpio_header_allocate();
+	if (c == NULL)
+		return (NULL);
+
 	memcpy(&c->st, st, sizeof(struct stat));
 	c->filename = strdup(fn);
 	return (c);
@@ -128,13 +140,17 @@ cpio_header_serialise(int fd, struct cpio_header *c)
  * indiciating the header size (ie, what to skip to get to the file contenst)
  * + a cpio_header if the entire header and filename was read.
  */
-int cpio_header_deserialise(const char *buf, int len,
+int
+cpio_header_deserialise(const char *buf, int len,
 	    struct cpio_header **hdr)
 {
 	struct cpio_header *h = NULL;
+	char pbuf[32];
+	unsigned long long n;
+	int filename_len;
 
 	/* We need at least this many bytes for a CPIO header */
-	if (len < 90) {
+	if (len < 76) {
 		return (0);
 	}
 
@@ -144,16 +160,99 @@ int cpio_header_deserialise(const char *buf, int len,
 	 * for each value, then strtoull() to convert it to the
 	 * octal value.
 	 */
+	h = cpio_header_allocate();
+	if (h == NULL) {
+		return (-1);
+	}
+
+	/* magic */
+	memcpy(pbuf, buf + 0, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	if (n != 070707) {
+		fprintf(stderr, "%s; bad magic\n", __func__);
+		goto fail;
+	}
+
+	/* dev */
+	memcpy(pbuf, buf + 6, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_dev = n;
+
+	/* inode */
+	memcpy(pbuf, buf + 12, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_ino = n;
+
+	/* mode */
+	memcpy(pbuf, buf + 18, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mode = n;
+
+	/* uid */
+	memcpy(pbuf, buf + 24, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mode = n;
+
+	/* gid */
+	memcpy(pbuf, buf + 30, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mode = n;
+
+	/* nlink */
+	memcpy(pbuf, buf + 36, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mode = n;
+
+	/* rdev */
+	memcpy(pbuf, buf + 42, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mode = n;
+
+	/* mtime - 11 */
+	memcpy(pbuf, buf + 48, 11); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	h->st.st_mtime = n;
+
+	/* filename length */
+	memcpy(pbuf, buf + 59, 6); pbuf[7] = '\0';
+	n = strtoull(pbuf, NULL, 8);
+	filename_len = n;
+
+	/* file length - 11 */
+	memcpy(pbuf, buf + 65, 11); pbuf[7] = '\0';
+	h->st.st_size = strtoull(pbuf, NULL, 8);
 
 	/*
 	 * Check that we have enough bytes for the filename size
 	 * that was provided.  If not then we need more data.
 	 */
+	if (len < 76 + filename_len) {
+		cpio_header_free(h);
+		return (0);
+	}
 
 	/*
 	 * Ok, our temporary cpio_header has all the bits.
 	 * Return it and how many bytes we consumed.
 	 */
+	h->filename = strndup(buf + 76, filename_len);
+	if (h->filename == NULL) {
+		warn("%s: strndup (%d bytes)", filename_len);
+		goto fail;
+	}
+
+	/*
+	 * Paranoia!
+	 */
+	h->filename[filename_len] = '\0';
+
+	*hdr = h;
+
+	/*
+	 * And finally, how much data to skip!
+	 */
+	return (76 + filename_len);
+
 fail:
 	if (h) {
 		cpio_header_free(h);
