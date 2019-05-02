@@ -89,7 +89,7 @@ archive_end(void)
 	int ret;
 
 	bzero(&sb, sizeof(sb));
-	c = cpio_header_create(&sb, "TRAILER!!");
+	c = cpio_header_create(&sb, "TRAILER!!!");
 	if (c == NULL) {
 		return (-1);
 	}
