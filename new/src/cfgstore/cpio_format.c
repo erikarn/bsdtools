@@ -70,26 +70,33 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 	if (c->filename == NULL) {
 		return (-1);
 	}
-	/* For now, just printf something for debugging */
-	len = snprintf(buf, 256, "%llu %llu %llu %d %d %d %d %d %llu %llu %llu",
+	/*
+	 * This is more annoying than it should be.
+	 *
+	 * Each of these numerical fields needs to be 6 octal digits long, save the 11 digit ones.
+	 * But, the width isn't limiting the maximum value.
+	 *
+	 * So, let's cheat. 6 octal digits is 6*3 = 18 bits long. 11*3 = 33 bits long.
+	 */
+	len = snprintf(buf, 256, "%6.6llo%6.6llo%6.6llo%6.6o%6.6o%6.6o%6.6o%6.6o%11.11llo%6.6llo%11.11llo",
 		(unsigned long long)070707,
-		(unsigned long long)c->st.st_dev,
-		(unsigned long long)c->st.st_ino,
-		c->st.st_mode,
-		c->st.st_uid,
-		c->st.st_gid,
-		c->st.st_nlink,
-		c->st.st_rdev,
-		(unsigned long long) (c->st.st_mtime),
-		(unsigned long long) strlen(c->filename),
-		(unsigned long long) c->st.st_size);
+		(unsigned long long)(c->st.st_dev & 0x3ffff),
+		(unsigned long long)(c->st.st_ino & 0x3ffff),
+		c->st.st_mode & 0x3ffff,
+		c->st.st_uid & 0x3ffff,
+		c->st.st_gid & 0x3ffff,
+		c->st.st_nlink & 0x3ffff,
+		c->st.st_rdev & 0x3ffff,
+		((unsigned long long) (c->st.st_mtime)) & 0x1ffffffffULL,
+		((unsigned long long) strlen(c->filename)) & 0x3ffff,
+		((unsigned long long) (c->st.st_size)) & 0x1ffffffffULL);
 
 	/*
 	 * We should error out if the length doesn't exactly match the
 	 * expected header size, when we DO have that header size..
 	 */
-	if (len < 0) {
-		warn("%s: snprintf", __func__);
+	if (len != (6+6+6+6+6+6+6+6+11+6+11)) {
+		warn("%s: snprintf (%d bytes)", __func__, len);
 		return (-1);
 	}
 	r = write(fd, buf, len);
@@ -101,6 +108,15 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 		warn("%s; short write", __func__);
 		return (-1);
 	}
+	/* Now write the filename; it's part of the header */
+	r = write(fd, c->filename, strlen(c->filename));
+	if (r == 0) {
+		return (0);
+	}
+	if (r != strlen(c->filename)) {
+		warn("%s: short write", __func__);
+		return (-1);
+	}
 	return (1);
 }
 
@@ -109,10 +125,38 @@ cpio_header_serialise(int fd, struct cpio_header *c)
  * struct.
  *
  * Returns -1 on error, 0 on "not enough data", and a positive number
+ * indiciating the header size (ie, what to skip to get to the file contenst)
  * + a cpio_header if the entire header and filename was read.
  */
 int cpio_header_deserialise(const char *buf, int len,
 	    struct cpio_header **hdr)
 {
+	struct cpio_header *h = NULL;
+
+	/* We need at least this many bytes for a CPIO header */
+	if (len < 90) {
+		return (0);
+	}
+
+	/*
+	 * This is a bit more annoying than serialising it.
+	 * To be paranoid let's create temporary staging strings
+	 * for each value, then strtoull() to convert it to the
+	 * octal value.
+	 */
+
+	/*
+	 * Check that we have enough bytes for the filename size
+	 * that was provided.  If not then we need more data.
+	 */
+
+	/*
+	 * Ok, our temporary cpio_header has all the bits.
+	 * Return it and how many bytes we consumed.
+	 */
+fail:
+	if (h) {
+		cpio_header_free(h);
+	}
 	return (-1);
 }
