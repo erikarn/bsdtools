@@ -237,7 +237,7 @@ cpio_header_deserialise(const char *buf, int len,
 	 */
 	h->filename = strndup(buf + 76, filename_len);
 	if (h->filename == NULL) {
-		warn("%s: strndup (%d bytes)", filename_len);
+		warn("%s: strndup (%d bytes)", __func__, filename_len);
 		goto fail;
 	}
 
