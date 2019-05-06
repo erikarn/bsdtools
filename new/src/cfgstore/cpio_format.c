@@ -166,7 +166,7 @@ cpio_header_deserialise(const char *buf, int len,
 	}
 
 	/* magic */
-	memcpy(pbuf, buf + 0, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 0, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	if (n != 070707) {
 		fprintf(stderr, "%s; bad magic\n", __func__);
@@ -174,52 +174,52 @@ cpio_header_deserialise(const char *buf, int len,
 	}
 
 	/* dev */
-	memcpy(pbuf, buf + 6, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 6, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_dev = n;
 
 	/* inode */
-	memcpy(pbuf, buf + 12, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 12, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_ino = n;
 
 	/* mode */
-	memcpy(pbuf, buf + 18, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 18, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mode = n;
 
 	/* uid */
-	memcpy(pbuf, buf + 24, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 24, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mode = n;
 
 	/* gid */
-	memcpy(pbuf, buf + 30, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 30, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mode = n;
 
 	/* nlink */
-	memcpy(pbuf, buf + 36, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 36, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mode = n;
 
 	/* rdev */
-	memcpy(pbuf, buf + 42, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 42, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mode = n;
 
 	/* mtime - 11 */
-	memcpy(pbuf, buf + 48, 11); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 48, 11); pbuf[11] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	h->st.st_mtime = n;
 
 	/* filename length */
-	memcpy(pbuf, buf + 59, 6); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 59, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
 	filename_len = n;
 
 	/* file length - 11 */
-	memcpy(pbuf, buf + 65, 11); pbuf[7] = '\0';
+	memcpy(pbuf, buf + 65, 11); pbuf[11] = '\0';
 	h->st.st_size = strtoull(pbuf, NULL, 8);
 
 	/*
