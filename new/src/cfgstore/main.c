@@ -12,6 +12,14 @@
 #include "cpio_format.h"
 #include "cpio_archive.h"
 
+const char *files[] = {
+	"cpio_archive.c",
+	"cpio_format.c",
+	"file_list.c",
+	"main.c",
+	NULL
+};
+
 int
 main(int argc, const char *argv[])
 {
@@ -20,11 +28,12 @@ main(int argc, const char *argv[])
 #if 0
 	a = cpio_archive_create("/dev/stdout", CPIO_ARCHIVE_MODE_WRITE);
 	cpio_archive_open(a);
-	cpio_archive_write_file(a, "main.c");
+	for (int i = 0; files[i] != NULL; i++) {
+		cpio_archive_write_file(a, files[i]);
+	}
 	cpio_archive_close(a);
 	cpio_archive_free(a);
-#endif
-#if 1
+#else
 	a = cpio_archive_create("/dev/stdin", CPIO_ARCHIVE_MODE_READ);
 	cpio_archive_open(a);
 	cpio_archive_begin_read(a);
