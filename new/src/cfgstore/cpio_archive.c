@@ -253,7 +253,7 @@ cpio_archive_begin_read(struct cpio_archive *a)
 		/*
 		 * If we've hit the end then close this file, free the header.
 		 */
-		if (a->read.c != NULL && a->read.consumed_bytes == 0) {
+		if (a->read.c != NULL && a->read.consumed_bytes == a->read.c->st.st_size) {
 			/* close the destination file */
 			printf("closing %s\n", a->read.c->filename);
 			/* close the state */
