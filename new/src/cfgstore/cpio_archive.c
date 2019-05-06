@@ -13,6 +13,20 @@
 #include "cpio_format.h"
 #include "cpio_archive.h"
 
+/*
+ * sanity check the file name.  This involves stripping
+ * out any leading ../ or ./ or / in the filename.
+ *
+ * Yes, this is a big, big todo.
+ */
+static char *
+cpio_path_sanity_filter(const char *src)
+{
+	/* XXX BIG TODO HERE! */
+	return strdup(src);
+}
+
+
 struct cpio_archive *
 cpio_archive_create(const char *file, cpio_archive_mode mode)
 {
@@ -26,6 +40,9 @@ cpio_archive_create(const char *file, cpio_archive_mode mode)
 	a->archive_filename = strdup(file);
 	a->mode = mode;
 	a->fd = -1;
+
+	a->base.fd = AT_FDCWD;
+
 	return a;
 }
 
@@ -88,11 +105,44 @@ cpio_archive_free(struct cpio_archive *a)
 
 	if (a->fd > -1)
 		close(a->fd);
+	if (a->base.fd > -1)
+		close(a->base.fd);
 	free(a->archive_filename);
+	free(a->base.dirname);
+	if (a->read.c != NULL)
+		cpio_header_free(a->read.c);
 	free(a);
 	return (0);
 }
 
+int
+cpio_archive_set_base_directory(struct cpio_archive *a, const char *dirname)
+{
+	if (a->base.fd > -1)
+		close(a->base.fd);
+	if (a->base.dirname)
+		free(a->base.dirname);
+	a->base.fd = -1;
+	a->base.dirname = NULL;
+
+	a->base.dirname = strdup(dirname);
+	if (a->base.dirname == NULL) {
+		warn("%s: strdup", __func__);
+		return (-1);
+	}
+	a->base.fd = open(dirname, O_RDONLY);
+	if (a->base.fd == -1) {
+		warn("%s: open (%s)", __func__, dirname);
+		return (-1);
+	}
+	return (0);
+}
+
+/*
+ * Write a file into the current archive. filename is either a
+ * full path or a relative to the defined base path / current working
+ * directory.
+ */
 int
 cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 {
@@ -103,7 +153,7 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	ssize_t rret, wret, wlen;
 	char buf[1024];
 
-	fd = open(filename, O_RDONLY);
+	fd = openat(a->base.fd, filename, O_RDONLY);
 	if (fd < 0) {
 		warn("open (%s)", filename);
 		goto fail;
@@ -180,6 +230,7 @@ cpio_archive_begin_read(struct cpio_archive *a)
 	ssize_t r;
 	size_t cs, cr;
 	int rr, retval = 0;
+	int target_fd = -1;
 
 	while (1) {
 
@@ -202,6 +253,8 @@ cpio_archive_begin_read(struct cpio_archive *a)
 		buf_len += r;
 
 		if (a->read.c == NULL) {
+			char *tmp_fn;
+
 			/*
 			 * We don't yet have a header; attempt to parse a header.
 			 */
@@ -233,6 +286,28 @@ cpio_archive_begin_read(struct cpio_archive *a)
 			buf_len -= rr;
 
 			a->read.consumed_bytes = 0;
+
+			/* Check for end of archive marker */
+			if ((a->read.c->st.st_size == 0) &&
+			    (strncmp(a->read.c->filename, "TRAILER!!!", 10)
+			      == 0)) {
+				/* We're done! */
+				break;
+			}
+
+			/* attempt to open a file */
+			tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
+			if (tmp_fn != NULL) {
+				/* XXX TODO: mode, owner, ctime/mtime, device id, etc */
+				target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT);
+				if (target_fd < 0) {
+					warn("%s: openat() (%s)", __func__,
+					  tmp_fn);
+					target_fd = -1;
+				}
+				free(tmp_fn);
+			}
+
 		}
 
 		/*
@@ -245,7 +320,34 @@ cpio_archive_begin_read(struct cpio_archive *a)
 
 		/*
 		 * Here is where we could write this to the destination file.
+		 * Again, I'm going to be cheap and not loop over the buffer
+		 * until it's written; I want to get the rest of this fleshed
+		 * out before I worry about better IO pipelines.
 		 */
+		if (target_fd != -1) {
+			ssize_t wr;
+			wr = write(target_fd, buf, cr);
+			if (wr != cr) {
+				fprintf(stderr, "%s: write size mismatch to "
+				  "destination file (%s) - wanted %llu bytes, "
+				  "wrote %llu bytes\n",
+				  __func__,
+				  a->read.c->filename,
+				  (unsigned long long) cr,
+				  (unsigned long long) wr);
+
+				/*
+				 * Close target_fd; we'll just consume but
+				 * not write the rest of this file contents
+				 * out.
+				 */
+				close(target_fd);
+				target_fd = -1;
+			}
+		}
+
+
+		/* Consume data */
 		memmove(buf, buf + cr, buf_len - cr);
 		buf_len -= cr;
 		a->read.consumed_bytes += cr;
@@ -259,7 +361,21 @@ cpio_archive_begin_read(struct cpio_archive *a)
 			/* close the state */
 			cpio_header_free(a->read.c);
 			a->read.c = NULL;
+			if (target_fd != -1) {
+				close(target_fd);
+				target_fd = -1;
+			}
 		}
+	}
+
+	/* Final cleanup */
+	if (a->read.c != NULL) {
+		cpio_header_free(a->read.c);
+		a->read.c = NULL;
+	}
+	if (target_fd != -1) {
+		close(target_fd);
+		target_fd = -1;
 	}
 
 	return retval;
