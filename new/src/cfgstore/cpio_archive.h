@@ -13,8 +13,8 @@ struct cpio_archive {
 	cpio_archive_mode mode;
 
 	struct {
-		int fd;
 		char *dirname;
+		int fd;
 	} base;
 
 	struct {

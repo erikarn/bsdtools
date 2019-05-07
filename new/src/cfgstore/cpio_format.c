@@ -176,42 +176,42 @@ cpio_header_deserialise(const char *buf, int len,
 	/* dev */
 	memcpy(pbuf, buf + 6, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_dev = n;
+	h->st.st_dev = (dev_t) n;
 
 	/* inode */
 	memcpy(pbuf, buf + 12, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_ino = n;
+	h->st.st_ino = (ino_t) n;
 
 	/* mode */
 	memcpy(pbuf, buf + 18, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mode = n;
+	h->st.st_mode = (mode_t) n;
 
 	/* uid */
 	memcpy(pbuf, buf + 24, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mode = n;
+	h->st.st_uid = (uid_t) n;
 
 	/* gid */
 	memcpy(pbuf, buf + 30, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mode = n;
+	h->st.st_gid = (gid_t) n;
 
 	/* nlink */
 	memcpy(pbuf, buf + 36, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mode = n;
+	h->st.st_nlink = (nlink_t) n;
 
 	/* rdev */
 	memcpy(pbuf, buf + 42, 6); pbuf[6] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mode = n;
+	h->st.st_rdev = (dev_t) n;
 
 	/* mtime - 11 */
 	memcpy(pbuf, buf + 48, 11); pbuf[11] = '\0';
 	n = strtoull(pbuf, NULL, 8);
-	h->st.st_mtime = n;
+	h->st.st_mtime = (time_t) n;
 
 	/* filename length */
 	memcpy(pbuf, buf + 59, 6); pbuf[6] = '\0';
