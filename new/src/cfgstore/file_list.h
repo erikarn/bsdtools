@@ -1,5 +1,5 @@
-#ifndef	__FILE_LSIT_H__
-#define	__FILE_LSIT_H__
+#ifndef	__FILE_LIST_H__
+#define	__FILE_LIST_H__
 
 struct file_list {
 	int nentries;
