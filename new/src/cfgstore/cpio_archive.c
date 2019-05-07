@@ -295,15 +295,38 @@ cpio_archive_begin_read(struct cpio_archive *a)
 				break;
 			}
 
-			/* attempt to open a file */
+			/*
+			 * Note: this logic ONLY handles creating files for
+			 * now.
+			 * This needs to be extended to handle block/char
+			 * devices, symlinks and hardlinks.
+			 */
+
+			/* attempt to open a file to write to */
 			tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
 			if (tmp_fn != NULL) {
 				/* XXX TODO: mode, owner, ctime/mtime, device id, etc */
-				target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT);
+				target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT,
+				    a->read.c->st.st_mode);
 				if (target_fd < 0) {
 					warn("%s: openat() (%s)", __func__,
 					  tmp_fn);
 					target_fd = -1;
+				}
+
+				/*
+				 * Set the file ownership.  For now don't warn;
+				 * it'll fail if you're non-root.
+				 */
+				if (fchown(target_fd, a->read.c->st.st_uid,
+				    a->read.c->st.st_gid) != 0) {
+#if 0
+					warn("%s: fchown (%s) (%llu/%llu)",
+					    __func__,
+					    a->read.c->filename,
+					    (unsigned long long) a->read.c->st.st_uid,
+					    (unsigned long long) a->read.c->st.st_gid);
+#endif
 				}
 				free(tmp_fn);
 			}
