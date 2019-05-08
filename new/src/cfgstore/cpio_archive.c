@@ -38,6 +38,12 @@ cpio_archive_create(const char *file, cpio_archive_mode mode)
 		warn("%s: calloc", __func__);
 		return NULL;
 	}
+
+	a->files.fl = file_list_create();
+	if (a->files.fl == NULL) {
+		free(a);
+		return (NULL);
+	}
 	a->archive_filename = strdup(file);
 	a->mode = mode;
 	a->fd = -1;
@@ -108,6 +114,8 @@ cpio_archive_free(struct cpio_archive *a)
 		close(a->fd);
 	if (a->base.fd > -1)
 		close(a->base.fd);
+	file_list_free(a->files.fl);
+	a->files.fl = NULL;
 	free(a->archive_filename);
 	free(a->base.dirname);
 	if (a->read.c != NULL)
@@ -213,8 +221,33 @@ int
 cpio_archive_write_add_manifest(struct cpio_archive *a, const char *filename)
 {
 
-	/* XXX TODO */
-	return -1;
+	return (file_list_add_entry(a->files.fl, filename));
+}
+
+/*
+ * Write the files to the current archive.  This iterates over the file list
+ * but does not flush/empty it.
+ */
+int
+cpio_archive_write_files(struct cpio_archive *a)
+{
+	int i;
+
+	/* XXX TODO: iterator */
+
+	for (i = 0; i < a->files.fl->nentries; i++) {
+		/*
+		 * For now don't error out if we fail to write a file;
+		 * just log a warning and continue.
+		 */
+		if (cpio_archive_write_file(a, a->files.fl->file_list[i]) != 0) {
+			fprintf(stderr, "%s: failed to write file (%s)\n",
+			    __func__,
+			    a->files.fl->file_list[i]);
+		}
+	}
+
+	return (0);
 }
 
 /*
@@ -222,7 +255,6 @@ cpio_archive_write_add_manifest(struct cpio_archive *a, const char *filename)
  * and print the headers, complete with validation.  This'll at least tell
  * me that my basic parsing logic is correct.
  */
-
 int
 cpio_archive_begin_read(struct cpio_archive *a)
 {

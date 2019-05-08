@@ -26,13 +26,14 @@ main(int argc, const char *argv[])
 	struct cpio_archive *a;
 
 
-#if 0
+#if 1
 	a = cpio_archive_create("/dev/stdout", CPIO_ARCHIVE_MODE_WRITE);
 	(void) cpio_archive_set_base_directory(a, ".");
 	cpio_archive_open(a);
 	for (int i = 0; files[i] != NULL; i++) {
-		cpio_archive_write_file(a, files[i]);
+		(void) cpio_archive_write_add_manifest(a, files[i]);
 	}
+	cpio_archive_write_files(a);
 	cpio_archive_close(a);
 	cpio_archive_free(a);
 #else
