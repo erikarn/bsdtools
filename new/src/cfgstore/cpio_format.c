@@ -90,15 +90,15 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 	 *
 	 * So, let's cheat. 6 octal digits is 6*3 = 18 bits long. 11*3 = 33 bits long.
 	 */
-	len = snprintf(buf, 256, "%6.6llo%6.6llo%6.6llo%6.6o%6.6o%6.6o%6.6o%6.6o%11.11llo%6.6llo%11.11llo",
+	len = snprintf(buf, 256, "%6.6llo%6.6llo%6.6llo%6.6llo%6.6llo%6.6llo%6.6llo%6.6llo%11.11llo%6.6llo%11.11llo",
 		(unsigned long long)070707,
 		(unsigned long long)(c->st.st_dev & 0x3ffff),
 		(unsigned long long)(c->st.st_ino & 0x3ffff),
-		c->st.st_mode & 0x3ffff,
-		c->st.st_uid & 0x3ffff,
-		c->st.st_gid & 0x3ffff,
-		c->st.st_nlink & 0x3ffff,
-		c->st.st_rdev & 0x3ffff,
+		((unsigned long long) c->st.st_mode) & 0x3ffff,
+		((unsigned long long) c->st.st_uid) & 0x3ffff,
+		((unsigned long long) c->st.st_gid) & 0x3ffff,
+		((unsigned long long) c->st.st_nlink) & 0x3ffff,
+		((unsigned long long) c->st.st_rdev) & 0x3ffff,
 		((unsigned long long) (c->st.st_mtime)) & 0x1ffffffffULL,
 		((unsigned long long) strlen(c->filename) + 1) & 0x3ffff,
 		((unsigned long long) (c->st.st_size)) & 0x1ffffffffULL);
