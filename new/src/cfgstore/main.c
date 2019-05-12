@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <strings.h>
+#include <string.h>
 #include <err.h>
 #include <fcntl.h>
 #include <limits.h>
