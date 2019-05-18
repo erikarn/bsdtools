@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <strings.h>
@@ -251,12 +252,10 @@ cpio_archive_write_files(struct cpio_archive *a)
 }
 
 /*
- * Begin reading from an archive.  For now just read through the archive
- * and print the headers, complete with validation.  This'll at least tell
- * me that my basic parsing logic is correct.
+ * Begin reading from an archive.
  */
 int
-cpio_archive_begin_read(struct cpio_archive *a)
+cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 {
 	char buf[1024];
 	int buf_len = 0;
@@ -336,34 +335,36 @@ cpio_archive_begin_read(struct cpio_archive *a)
 			 */
 
 			/* attempt to open a file to write to */
-			tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
-			if (tmp_fn != NULL) {
-				/* XXX TODO: mode, owner, ctime/mtime, device id, etc */
-				target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT,
-				    a->read.c->st.st_mode);
-				if (target_fd < 0) {
-					warn("%s: openat() (%s)", __func__,
-					  tmp_fn);
-					target_fd = -1;
-				}
+			if (do_extract) {
+				tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
+				if (tmp_fn != NULL) {
+					/* XXX TODO: mode, owner, ctime/mtime, device id, etc */
+					target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT,
+					    a->read.c->st.st_mode);
+					if (target_fd < 0) {
+						warn("%s: openat() (%s)", __func__,
+						  tmp_fn);
+						target_fd = -1;
+					}
 
-				/*
-				 * Set the file ownership.  For now don't warn;
-				 * it'll fail if you're non-root.
-				 */
-				if (fchown(target_fd, a->read.c->st.st_uid,
-				    a->read.c->st.st_gid) != 0) {
+					/*
+					 * Set the file ownership.  For now don't warn;
+					 * it'll fail if you're non-root.
+					 */
+					if ((target_fd >= 0) &&
+					    (fchown(target_fd, a->read.c->st.st_uid,
+					    a->read.c->st.st_gid) != 0)) {
 #if 0
-					warn("%s: fchown (%s) (%llu/%llu)",
-					    __func__,
-					    a->read.c->filename,
-					    (unsigned long long) a->read.c->st.st_uid,
-					    (unsigned long long) a->read.c->st.st_gid);
+						warn("%s: fchown (%s) (%llu/%llu)",
+						    __func__,
+						    a->read.c->filename,
+						    (unsigned long long) a->read.c->st.st_uid,
+						    (unsigned long long) a->read.c->st.st_gid);
 #endif
+					}
+					free(tmp_fn);
 				}
-				free(tmp_fn);
 			}
-
 		}
 
 		/*
