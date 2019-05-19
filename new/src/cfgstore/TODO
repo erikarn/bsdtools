@@ -1,0 +1,6 @@
+* Need to tidy up the output when extracting and listing - it's debug-y right now
+* Need to take a block size for reads/writes; right now it's a fixed size buffer
+  but actual IO is not being done in a block size.  I'll need this for the
+  flash filesystem.
+* Add native gzip/gunzip in the command.
+

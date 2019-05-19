@@ -34,7 +34,7 @@ extern	int cpio_archive_free(struct cpio_archive *a);
 extern	int cpio_archive_write_file(struct cpio_archive *a, const char *filename);
 extern	int cpio_archive_write_files(struct cpio_archive *a);
 extern	int cpio_archive_write_add_manifest(struct cpio_archive *a, const char *filename);
-extern	int cpio_archive_begin_read(struct cpio_archive *a);
+extern	int cpio_archive_begin_read(struct cpio_archive *a, bool do_extract);
 extern	int cpio_archive_set_base_directory(struct cpio_archive *a, const char *dir);
 
 #endif	/* _CPIO_ARCHIVE_H__ */
