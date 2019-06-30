@@ -161,7 +161,7 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	int fd = -1;
 	int ret;
 	ssize_t rret, wret, wlen;
-	char buf[1024];
+	char buf[XCPIO_WRITE_BUF_SIZE];
 
 	fd = openat(a->base.fd, filename, O_RDONLY);
 	if (fd < 0) {
@@ -187,7 +187,7 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	 * fine.
 	 */
 	while (1) {
-		rret = read(fd, buf, 1024);
+		rret = read(fd, buf, XCPIO_WRITE_BUF_SIZE);
 		if (rret == 0) {
 			break;
 		}
