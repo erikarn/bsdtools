@@ -97,6 +97,16 @@ cpio_archive_close(struct cpio_archive *a)
 		}
 		cpio_header_free(c);
 
+		/*
+		 * XXX TODO: If we're doing block sized writes then it's possible
+		 * that our file write didn't /completely/ write a full block.
+		 * So when converting this over to block write buffering be
+		 * super careful not to lose data here.
+		 *
+		 * Also make sure the last write is padded to the correct
+		 * block buffer size.
+		 */
+
 		close(a->fd);
 		a->fd = -1;
 		return (0);
@@ -187,6 +197,7 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	 * fine.
 	 */
 	while (1) {
+		/* Note: this reads from the file we opened */
 		rret = read(fd, buf, XCPIO_WRITE_BUF_SIZE);
 		if (rret == 0) {
 			break;
@@ -197,6 +208,10 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 		}
 		wlen = 0;
 		while (wlen < rret) {
+			/*
+			 * XXX TODO: this writes to the underlying device
+			 * and THIS must eventually be block sized writes!
+			 */
 			wret = write(a->fd, buf + wlen, rret - wlen);
 			if (wret == 0) {
 				warn("write");
@@ -205,6 +220,13 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 			wlen += wret;
 		}
 	}
+
+	/*
+	 * XXX TODO: If we're doing block sized writes then it's possible
+	 * that our file write didn't /completely/ write a full block.
+	 * So when converting this over to block write buffering be
+	 * super careful not to lose data here.
+	 */
 
 	close(fd);
 	cpio_header_free(c);
@@ -248,6 +270,13 @@ cpio_archive_write_files(struct cpio_archive *a)
 		}
 	}
 
+	/*
+	 * XXX TODO: If we're doing block sized writes then it's possible
+	 * that our file write didn't /completely/ write a full block.
+	 * So when converting this over to block write buffering be
+	 * super careful not to lose data here.
+	 */
+
 	return (0);
 }
 
@@ -268,6 +297,11 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 
 		/* Consume data if we have space */
 		if (buf_len < 1024) {
+			/*
+			 * XXX TODO: this is where we need to make sure
+			 * that the blocks are read in a fixed block size,
+			 * rather than "always fill the buffer."
+			 */
 			r = read(a->fd, buf + buf_len, 1024 - buf_len);
 			/* Note: EOF is a problem if we are expecting another file. */
 			if (r == 0) {
@@ -383,6 +417,12 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 		 */
 		if (target_fd != -1) {
 			ssize_t wr;
+			/*
+			 * Note: this is the write to the target file.
+			 *
+			 * Ideally this would also be buffered in memory and
+			 * do larger writes for efficiency.
+			 */
 			wr = write(target_fd, buf, cr);
 			if (wr != cr) {
 				fprintf(stderr, "%s: write size mismatch to "
