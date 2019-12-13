@@ -19,13 +19,45 @@ struct cpio_filehandle {
 	} write_buffer;
 };
 
+/*
+ * Initialise the fileio layer.
+ */
 extern	void cpio_fileio_init(void);
+
+/*
+ * Create a CPIO file handle.
+ */
 extern	struct cpio_filehandle * cpio_fileio_create(void);
+
+/*
+ * Set the file handle path for doing IO.
+ */
 extern	int cpio_fileio_set_path(struct cpio_filehandle *, const char *);
-extern	int cpio_fileio_set_path(struct cpio_filehandle *, const char *);
+
+/*
+ * Open the file given the provided configuration.
+ */
 extern	int cpio_fileio_open(struct cpio_filehandle *);
+
+/*
+ * Open the file given the provided configuration and openat FD.
+ */
 extern	int cpio_fileio_openat(struct cpio_filehandle *, int);
+
+/*
+ * Close the given CPIO file.  Thus flushes any pending
+ * IO and will close the handle.
+ *
+ * Note that it doesn't free the file handle; so it can be
+ * reused for opening again.
+ */
 extern	int cpio_fileio_close(struct cpio_filehandle *);
+
+/*
+ * Free the given CPIO file handle.  If it isn't closed then
+ * it will first be flushed and closed.
+ */
+extern	void cpio_fileio_free_handle(struct cpio_filehandle *);
 
 /*
  * Set the underlying block size for reads and writes.
