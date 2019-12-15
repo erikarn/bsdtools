@@ -28,6 +28,15 @@ struct cpio_archive {
 		size_t consumed_bytes;
 	} read;
 
+	/*
+	 * This is the write buffer to ensure things are done
+	 * in block-size IO transactions.
+	 */
+	struct {
+		char *buf;
+		int size, len;
+	} write;
+
 	struct {
 		struct file_list *fl;
 	} files;

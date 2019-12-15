@@ -59,8 +59,112 @@ cpio_archive_create(const char *file, cpio_archive_mode mode)
 int
 cpio_archive_set_blocksize(struct cpio_archive *a, int block_size)
 {
+	char *buf;
+
 	a->block_size = block_size;
 	return 0;
+}
+
+/*
+ * Attempt to flush out whatever is in the write buffer.
+ *
+ * If do_padding is true then pad it out to write a given block size.
+ * Then, consume the data in the buffer.
+ *
+ * If do_padding is false then don't write if the buffer isn't full.
+ */
+static int
+cpio_archive_write_flush(struct cpio_archive *a, int do_padding)
+{
+	ssize_t ret;
+
+	if (do_padding) {
+		/* Make sure the rest of the buffer is zeroed */
+		memset(a->write.buf + a->write.len, 0,
+		    a->write.size - a->write.len);
+	} else {
+		/* Don't run if we aren't full */
+		if (a->write.size != a->write.len) {
+			return (0);
+		}
+	}
+
+	/* Write it out; error out if it's not the whole thing */
+	ret = write(a->fd, a->write.buf, a->write.size);
+	if (ret < 0) {
+		warn("%s: write failed", __func__);
+		return (-1);
+	}
+	/*
+	 * Note: We can't handle partial writes here.
+	 */
+	if (ret != a->write.size) {
+		fprintf(stderr, "%s: partial write (%d, not %d bytes)\n",
+		  __func__,
+		  (int) ret,
+		  a->write.size);
+		return (-1);
+	}
+
+	/* Consume everything */
+	a->write.len = 0;
+
+	return (a->write.size);
+}
+
+/*
+ * Copy data into the staging write buffer and once a full write
+ * size worth of data is available, write it out.  Loop over until
+ * everything is written that can be written.
+ */
+static int
+cpio_archive_write_data(struct cpio_archive *a, const char *write_buf,
+    int write_len)
+{
+	int bytes_written = 0;
+	int copy_len;
+	ssize_t ret;
+
+	do {
+		/*
+		 * Step 1 - see if anything is in the write buffer.
+		 * If it's full then make sure we write it out here.
+		 * This will do nothing in the buffer isn't full.
+		 */
+		if (cpio_archive_write_flush(a, false) < 0) {
+			return (-1);
+		}
+
+		/*
+		 * Step 1.5 - don't continue if we're out of incoming
+		 * data.
+		 */
+		if (write_len == 0) {
+			break;
+		}
+
+		/*
+		 * Step 2 - copy over data from the incoming buffer,
+		 * until the write buffer is full OR we're out of
+		 * write buffer data.
+		 */
+		copy_len = MIN(write_len, a->write.size - a->write.len);
+		memcpy(a->write.buf + a->write.len, write_buf, copy_len);
+		a->write.len += copy_len;
+
+		/*
+		 * Step 3 - consume the data from the incoming buffer.
+		 */
+		write_len -= copy_len;
+		write_buf += copy_len;
+
+		/*
+		 * Loop over again!  This will keep looping over until
+		 * we can't fill the write buffer.
+		 */
+	} while (a->write.len == a->write.size);
+
+	return bytes_written;
 }
 
 int
@@ -82,6 +186,14 @@ cpio_archive_open(struct cpio_archive *a)
 		warn("%s: open (%s)", __func__, a->archive_filename);
 		return -1;
 	}
+
+	a->write.buf = calloc(1, a->block_size);
+	if (a->write.buf == NULL) {
+		warn("%s: calloc(%d)", __func__, a->block_size);
+		return -1;
+	}
+	a->write.size = a->block_size;
+	a->write.len = 0;
 	return 0;
 }
 
@@ -107,14 +219,9 @@ cpio_archive_close(struct cpio_archive *a)
 		cpio_header_free(c);
 
 		/*
-		 * XXX TODO: If we're doing block sized writes then it's possible
-		 * that our file write didn't /completely/ write a full block.
-		 * So when converting this over to block write buffering be
-		 * super careful not to lose data here.
-		 *
-		 * Also make sure the last write is padded to the correct
-		 * block buffer size.
+		 * Flush out any pending data; make sure it's padded.
 		 */
+		cpio_archive_write_flush(a, true);
 
 		close(a->fd);
 		a->fd = -1;
@@ -218,24 +325,17 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 		wlen = 0;
 		while (wlen < rret) {
 			/*
-			 * XXX TODO: this writes to the underlying device
-			 * and THIS must eventually be block sized writes!
+			 * Note: this writes to the underlying device
+			 * and THIS must be block sized writes!
 			 */
-			wret = write(a->fd, buf + wlen, rret - wlen);
-			if (wret == 0) {
+			wret = cpio_archive_write_data(a, buf + wlen, rret - wlen);
+			if (wret <= 0) {
 				warn("write");
 				goto fail;
 			}
 			wlen += wret;
 		}
 	}
-
-	/*
-	 * XXX TODO: If we're doing block sized writes then it's possible
-	 * that our file write didn't /completely/ write a full block.
-	 * So when converting this over to block write buffering be
-	 * super careful not to lose data here.
-	 */
 
 	close(fd);
 	cpio_header_free(c);
@@ -279,13 +379,6 @@ cpio_archive_write_files(struct cpio_archive *a)
 		}
 	}
 
-	/*
-	 * XXX TODO: If we're doing block sized writes then it's possible
-	 * that our file write didn't /completely/ write a full block.
-	 * So when converting this over to block write buffering be
-	 * super careful not to lose data here.
-	 */
-
 	return (0);
 }
 
@@ -295,23 +388,44 @@ cpio_archive_write_files(struct cpio_archive *a)
 int
 cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 {
-	char buf[1024];
+	char *buf;
 	int buf_len = 0;
+	int buf_size = a->block_size * 4;
 	ssize_t r;
 	size_t cs, cr;
 	int rr, retval = 0;
 	int target_fd = -1;
 
+	/*
+	 * Note: the buf size is greater than block_size so
+	 * we can read in block_size reads and potentially
+	 * read over the block boundary whilst accumulating
+	 * data like header info.
+	 *
+	 * Yes, the important thing here is that stuff like
+	 * the individual files in the archive aren't aligned
+	 * to block sizes; only the actual archive itself
+	 * is block size aligned.
+	 *
+	 * Hopefully (!) nothing dumb like file names will
+	 * cause the header parsing to exceed 4x the block size.
+	 */
+	buf = calloc(1, buf_size);
+	if (buf == NULL) {
+		warn("%s: calloc(%d)", __func__, buf_size);
+		return (-1);
+	}
+
 	while (1) {
 
 		/* Consume data if we have space */
-		if (buf_len < 1024) {
+		if (buf_len < (buf_size - a->block_size)) {
 			/*
-			 * XXX TODO: this is where we need to make sure
+			 * This is where we need to make sure
 			 * that the blocks are read in a fixed block size,
 			 * rather than "always fill the buffer."
 			 */
-			r = read(a->fd, buf + buf_len, 1024 - buf_len);
+			r = read(a->fd, buf + buf_len, a->block_size);
 			/* Note: EOF is a problem if we are expecting another file. */
 			if (r == 0) {
 				retval = -1;
@@ -337,13 +451,24 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 			if (rr < 0) {
 				break;
 			}
-			if (rr == 0 && buf_len < 1024) {
+			if (rr == 0 && buf_len < buf_size) {
 				/* Not enough data left in the buffer */
 				continue;
 			}
-			if (rr == 0 && buf_len == 1024) {
-				/* No header parsable yet? Bail out, someone's playing bad games */
-				printf("%s: failed; didn't complete header/filename within 1024 bytes\n", __func__);
+			/*
+			 * Check if we've got our header before we ran out
+			 * of incoming space.
+			 *
+			 * Importantly, we need to make sure that we can't
+			 * read any FURTHER data, rather than it's full.
+			 */
+			if (rr == 0 && buf_len > (buf_size - a->block_size)) {
+				/*
+				 * No header parsable yet? Bail out, someone's
+				 * playing bad games!
+				 */
+				printf("%s: failed; didn't complete header/filename within %d bytes\n",
+				    __func__, buf_size);
 				retval = -1;
 				break;
 			}
@@ -482,6 +607,9 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 	if (target_fd != -1) {
 		close(target_fd);
 		target_fd = -1;
+	}
+	if (buf != NULL) {
+		free(buf);
 	}
 
 	return retval;
