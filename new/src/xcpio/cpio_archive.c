@@ -455,6 +455,7 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 	size_t cs, cr;
 	int rr, retval = 0;
 	int target_fd = -1;
+	bool hit_eof = false;
 
 	/*
 	 * Note: the buf size is greater than block_size so
@@ -484,18 +485,23 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 			 * This is where we need to make sure
 			 * that the blocks are read in a fixed block size,
 			 * rather than "always fill the buffer."
+			 *
+			 * Note: EOF here isn't the problem; it's EOF /and/
+			 * being empty that's the problem.
 			 */
-			r = read(a->fd, buf + buf_len, a->block_size);
-			/* Note: EOF is a problem if we are expecting another file. */
-			if (r == 0) {
-				retval = -1;
-				break;
-			}
-			/* Note: error is a problem */
-			if (r < 0) {
-				warn("%s: read", __func__);
-				retval = -1;
-				break;
+			if (hit_eof == false) {
+				r = read(a->fd, buf + buf_len, a->block_size);
+				if (r == 0) {
+					hit_eof = true;
+				}
+				/*
+				 * Note: error is a problem; consume what we
+				 * can from the buffer and let it run out.
+				 */
+				if (r < 0) {
+					warn("%s: read", __func__);
+					hit_eof = true;
+				}
 			}
 		}
 
@@ -522,7 +528,7 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 			 * Importantly, we need to make sure that we can't
 			 * read any FURTHER data, rather than it's full.
 			 */
-			if (rr == 0 && buf_len > (buf_size - a->block_size)) {
+			if (rr == 0 && (buf_len > (buf_size - a->block_size) || hit_eof == true)) {
 				/*
 				 * No header parsable yet? Bail out, someone's
 				 * playing bad games!
@@ -656,6 +662,17 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 				close(target_fd);
 				target_fd = -1;
 			}
+		}
+
+		/*
+		 * Finally, if we are consuming data and we've not hit
+		 * the end of the filesize BUT we're out of data to
+		 * consume then error out.
+		 */
+		if ((a->read.c != NULL) && (a->read.consumed_bytes < a->read.c->st.st_size) &&
+		    (buf_len == 0) && (hit_eof)) {
+			retval = 0;
+			break;
 		}
 	}
 
