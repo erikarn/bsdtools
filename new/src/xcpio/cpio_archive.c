@@ -59,8 +59,9 @@ cpio_archive_create(const char *file, cpio_archive_mode mode)
 int
 cpio_archive_set_blocksize(struct cpio_archive *a, int block_size)
 {
-	char *buf;
-
+	if (block_size <= 0) {
+		return -1;
+	}
 	a->block_size = block_size;
 	return 0;
 }
@@ -132,6 +133,7 @@ cpio_archive_write_data(struct cpio_archive *a, const char *write_buf,
 		 * This will do nothing in the buffer isn't full.
 		 */
 		if (cpio_archive_write_flush(a, false) < 0) {
+			printf("failed to flush\n");
 			return (-1);
 		}
 
@@ -159,6 +161,11 @@ cpio_archive_write_data(struct cpio_archive *a, const char *write_buf,
 		write_buf += copy_len;
 
 		/*
+		 * Step 4 - track what we've consumed
+		 */
+		bytes_written += copy_len;
+
+		/*
 		 * Loop over again!  This will keep looping over until
 		 * we can't fill the write buffer.
 		 */
@@ -170,12 +177,17 @@ cpio_archive_write_data(struct cpio_archive *a, const char *write_buf,
 int
 cpio_archive_open(struct cpio_archive *a)
 {
+	if (a->block_size == 0) {
+		fprintf(stderr, "%s: ERROR: block_size must not be 0\n",
+		    __func__);
+		return -1;
+	}
 	switch (a->mode) {
 	case CPIO_ARCHIVE_MODE_READ:
 		a->fd = open(a->archive_filename, O_RDONLY);
 		break;
 	case CPIO_ARCHIVE_MODE_WRITE:
-		a->fd = open(a->archive_filename, O_WRONLY | O_CREAT);
+		a->fd = open(a->archive_filename, O_WRONLY | O_CREAT, 0644);
 		break;
 	default:
 		a->fd = -1;
@@ -205,17 +217,21 @@ cpio_archive_close(struct cpio_archive *a)
 	int ret;
 
 	if (a->mode == CPIO_ARCHIVE_MODE_WRITE) {
+		char *sbuf;
+		int slen;
 		bzero(&sb, sizeof(sb));
 		c = cpio_header_create(&sb, "TRAILER!!!");
 		if (c == NULL) {
 			return (-1);
 		}
 
-		ret = cpio_header_serialise(a->fd, c);
-		if (ret < 1) {
+		sbuf = cpio_header_serialise(a->fd, c, &slen);
+		if (sbuf == NULL) {
 			cpio_header_free(c);
 			return (-1);
 		}
+		cpio_archive_write_data(a, sbuf, slen);
+		free(sbuf); sbuf = NULL;
 		cpio_header_free(c);
 
 		/*
@@ -287,7 +303,10 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	int fd = -1;
 	int ret;
 	ssize_t rret, wret, wlen;
+	/* XXX TODO: make this 4x the block size.. */
 	char buf[XCPIO_WRITE_BUF_SIZE];
+	char *sbuf;
+	int slen;
 
 	fd = openat(a->base.fd, filename, O_RDONLY);
 	if (fd < 0) {
@@ -306,7 +325,15 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 		goto fail;
 	}
 
-	(void) cpio_header_serialise(a->fd, c);
+	sbuf = cpio_header_serialise(a->fd, c, &slen);
+	if (sbuf == NULL) {
+		goto fail;
+	}
+	if (cpio_archive_write_data(a, sbuf, slen) <= 0) {
+		free(sbuf);
+		goto fail;
+	}
+	free(sbuf); sbuf = NULL;
 
 	/*
 	 * Yeah yeah 1k read/write is tiny, but for this use case it's

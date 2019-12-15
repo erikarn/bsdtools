@@ -18,10 +18,8 @@ extern	void cpio_header_free(struct cpio_header *);
 
 /*
  * Write the given struct stat header to the output stream.
- *
- * Returns 1 if OK, 0 if EOF, -1 if error.
  */
-extern	int cpio_header_serialise(int fd, struct cpio_header *c);
+extern	char * cpio_header_serialise(int fd, struct cpio_header *c, int *buf_len);
 
 /*
  * Parse the given input stream buffer and populate a cpio_header

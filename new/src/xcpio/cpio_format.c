@@ -68,20 +68,28 @@ cpio_header_free(struct cpio_header *c)
 }
 
 /*
- * Write the given struct stat header to the output stream.
- *
- * Returns 1 if OK, 0 if EOF, -1 if error.
+ * Serialise the given struct stat header to the output stream.
  */
-int
-cpio_header_serialise(int fd, struct cpio_header *c)
+char *
+cpio_header_serialise(int fd, struct cpio_header *c, int *buf_len)
 {
 	char buf[256];
+	char *ret_buf;
 	int len;
 	ssize_t r;
+	int ret_len = 0;
 
 	if (c->filename == NULL) {
-		return (-1);
+		return (NULL);
 	}
+
+	/* Allocate buffer, plenty of padding */
+	ret_buf = calloc(1, 256 + 256 + strlen(c->filename) + 1);
+	if (ret_buf == NULL) {
+		warn("calloc (%d bytes)", (int) (256 + 256 + strlen(c->filename) + 1));
+		return NULL;
+	}
+
 	/*
 	 * This is more annoying than it should be.
 	 *
@@ -109,27 +117,19 @@ cpio_header_serialise(int fd, struct cpio_header *c)
 	 */
 	if (len != (6+6+6+6+6+6+6+6+11+6+11)) {
 		warn("%s: snprintf (%d bytes)", __func__, len);
-		return (-1);
+		free(ret_buf);
+		return (NULL);
 	}
-	r = write(fd, buf, len);
-	/* TODO: handle EINTR? */
-	if (r == 0) {
-		return (0);
-	}
-	if (r != len) {
-		warn("%s; short write", __func__);
-		return (-1);
-	}
+	ret_len = len;
+	memcpy(ret_buf, buf, len);
+
 	/* Now write the filename + trailing NUL; it's part of the header */
-	r = write(fd, c->filename, strlen(c->filename) + 1);
-	if (r == 0) {
-		return (0);
-	}
-	if (r != strlen(c->filename) + 1) {
-		warn("%s: short write", __func__);
-		return (-1);
-	}
-	return (1);
+	memcpy(ret_buf + ret_len, c->filename, strlen(c->filename) + 1);
+	ret_len += strlen(c->filename) + 1;
+
+	/* Return it! */
+	*buf_len = ret_len;
+	return (ret_buf);
 }
 
 /*

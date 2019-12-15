@@ -58,7 +58,10 @@ cpio_archive_extract(const char *base_directory, const char *archive_file,
 		goto error;
 	}
 
-	cpio_archive_open(a);
+	if (cpio_archive_open(a) < 0) {
+		fprintf(stderr, "ERROR: failed to open archive\n");
+		goto error;
+	}
 	cpio_archive_begin_read(a, do_extract);
 	cpio_archive_close(a);
 	cpio_archive_free(a);
@@ -125,7 +128,10 @@ cpio_archive_output_create(const char *base_directory, const char *manifest,
 	}
 
 	/* XXX TODO: handle errors here; clean up */
-	(void) cpio_archive_open(a);
+	if (cpio_archive_open(a) < 0) {
+		fprintf(stderr, "ERROR: failed to open archive\n");
+		goto error;
+	}
 	/* Files are added to the manifest list, create things */
 	(void) cpio_archive_write_files(a);
 	(void) cpio_archive_close(a);
