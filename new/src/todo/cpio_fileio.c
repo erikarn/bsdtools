@@ -1,6 +1,5 @@
-#ifndef	__CPIO_FILEIO_H__
-#define	__CPIO_FILEIO_H__
 
+#if 0
 struct cpio_filehandle {
 	int fd;
 	char *filename;
@@ -18,31 +17,63 @@ struct cpio_filehandle {
 		int offset;
 	} write_buffer;
 };
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <err.h>
 
 /*
  * Initialise the fileio layer.
  */
-extern	void cpio_fileio_init(void);
+void
+cpio_fileio_init(void)
+{
+}
 
 /*
  * Create a CPIO file handle.
  */
-extern	struct cpio_filehandle * cpio_fileio_create(void);
+struct cpio_filehandle *
+cpio_fileio_create(void)
+{
+	struct cpio_filehandle *fh;
+
+	fh = calloc(1, sizeof(struct cpio_filehandle));
+	if (fh == NULL) {
+		warn("%s: calloc", __func__);
+		return NULL;
+	}
+
+	fh->openat_fd = -1;
+	fh->fd = -1;
+	return fh;
+}
 
 /*
  * Set the file handle path for doing IO.
  */
-extern	int cpio_fileio_set_path(struct cpio_filehandle *, const char *);
+int
+cpio_fileio_set_path(struct cpio_filehandle *fh, const char *filename)
+{
+}
 
 /*
  * Open the file given the provided configuration.
  */
-extern	int cpio_fileio_open(struct cpio_filehandle *);
+int
+cpio_fileio_open(struct cpio_filehandle *fh)
+{
+}
 
 /*
  * Open the file given the provided configuration and openat FD.
  */
-extern	int cpio_fileio_openat(struct cpio_filehandle *, int);
+int
+cpio_fileio_openat(struct cpio_filehandle *fh, int openat_fd)
+{
+}
 
 /*
  * Close the given CPIO file.  Thus flushes any pending
@@ -51,28 +82,40 @@ extern	int cpio_fileio_openat(struct cpio_filehandle *, int);
  * Note that it doesn't free the file handle; so it can be
  * reused for opening again.
  */
-extern	int cpio_fileio_close(struct cpio_filehandle *);
+int
+cpio_fileio_close(struct cpio_filehandle *fh)
+{
+}
 
 /*
  * Free the given CPIO file handle.  If it isn't closed then
  * it will first be flushed and closed.
  */
-extern	void cpio_fileio_free_handle(struct cpio_filehandle *);
+void
+cpio_fileio_free_handle(struct cpio_filehandle *)
+{
+}
 
 /*
  * Set the underlying block size for reads and writes.
  *
- * This library is used to ensure that reads and writes are performed
+ * This library is used to ensure that seeks, reads and writes are performed
  * in multiples of the underlying block size.
  */
-extern	int cpio_fileio_set_block_size(struct cpio_filehandle *, size_t);
+int
+cpio_fileio_set_block_size(struct cpio_filehandle *, size_t)
+{
+}
 
 /*
  * Set the buffer size for reads and writes.
  *
  * This must be a multiple of the block size.
  */
-extern	int cpio_fileio_set_buffer_size(struct cpio_filehandle *, size_t);
+int
+cpio_fileio_set_buffer_size(struct cpio_filehandle *, size_t)
+{
+}
 
 /*
  * Flush data out to the underlying filehandle, up to the point of
@@ -80,7 +123,10 @@ extern	int cpio_fileio_set_buffer_size(struct cpio_filehandle *, size_t);
  *
  * This will return how much data is left in the write buffer.
  */
-extern	int cpio_fileio_flush(struct cpio_filehandle *);
+int
+cpio_fileio_flush(struct cpio_filehandle *)
+{
+}
 
 /*
  * Flush data out to the underlying filehandle and zero-pad
@@ -89,7 +135,10 @@ extern	int cpio_fileio_flush(struct cpio_filehandle *);
  * This will return how much data was written, including the
  * zero-padded data.
  */
-extern	int cpio_fileio_flush_all(struct cpio_filehandle *);
+int
+cpio_fileio_flush_all(struct cpio_filehandle *)
+{
+}
 
 /*
  * Read data from the file handle, ensuring the underlying file reads
@@ -99,7 +148,10 @@ extern	int cpio_fileio_flush_all(struct cpio_filehandle *);
  * of the underlying block size and then return enough data to satisfy the
  * caller.
  */
-extern	ssize_t cpio_fileio_read(struct cpio_filehandle *, char *, ssize_t);
+ssize_t
+cpio_fileio_read(struct cpio_filehandle *, char *, ssize_t)
+{
+}
 
 /*
  * Write data from the file handle, ensuring the underlying file writes
@@ -116,6 +168,9 @@ extern	ssize_t cpio_fileio_read(struct cpio_filehandle *, char *, ssize_t);
  * Bigger note : if there isn't enough buffered data when flush is called,
  * the flush will return a warning.
  */
-extern	ssize_t cpio_fileio_write(struct cpio_filehandle *, char *, ssize_t);
+ssize_t
+cpio_fileio_write(struct cpio_filehandle *, char *, ssize_t)
+{
+}
 
 #endif	/* __CPIO_FILEIO_H__ */
