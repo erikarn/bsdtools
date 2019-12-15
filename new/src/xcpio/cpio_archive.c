@@ -51,7 +51,16 @@ cpio_archive_create(const char *file, cpio_archive_mode mode)
 
 	a->base.fd = AT_FDCWD;
 
+	a->block_size = DEFAULT_CPIO_BLOCK_SIZE;
+
 	return a;
+}
+
+int
+cpio_archive_set_blocksize(struct cpio_archive *a, int block_size)
+{
+	a->block_size = block_size;
+	return 0;
 }
 
 int

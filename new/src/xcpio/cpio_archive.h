@@ -4,6 +4,8 @@
 #define	XCPIO_WRITE_BUF_SIZE	1024
 #define	XCPIO_READ_BUF_SIZE	1024
 
+#define	DEFAULT_CPIO_BLOCK_SIZE	512
+
 typedef enum {
 	CPIO_ARCHIVE_MODE_NONE,
 	CPIO_ARCHIVE_MODE_READ,
@@ -14,6 +16,7 @@ struct cpio_archive {
 	char *archive_filename;
 	int fd;
 	cpio_archive_mode mode;
+	int block_size;
 
 	struct {
 		char *dirname;
@@ -31,6 +34,7 @@ struct cpio_archive {
 };
 
 extern	struct cpio_archive * cpio_archive_create(const char *file, cpio_archive_mode mode);
+extern	int cpio_archive_set_blocksize(struct cpio_archive *a, int block_size);
 extern	int cpio_archive_open(struct cpio_archive *a);
 extern	int cpio_archive_close(struct cpio_archive *a);
 extern	int cpio_archive_free(struct cpio_archive *a);

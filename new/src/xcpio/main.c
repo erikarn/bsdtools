@@ -36,7 +36,7 @@ char_trim_crlf(char *s)
 }
 static int
 cpio_archive_extract(const char *base_directory, const char *archive_file,
-    bool do_extract)
+    bool do_extract, int block_size)
 {
 	struct cpio_archive *a = NULL;
 	int r;
@@ -46,6 +46,7 @@ cpio_archive_extract(const char *base_directory, const char *archive_file,
 	if (a == NULL) {
 		goto error;
 	}
+	cpio_archive_set_blocksize(a, block_size);
 
 	if (base_directory == NULL) {
 		r = cpio_archive_set_base_directory(a, ".");
@@ -70,7 +71,7 @@ error:
 
 static int
 cpio_archive_output_create(const char *base_directory, const char *manifest,
-    const char *outfile)
+    const char *outfile, int block_size)
 {
 	struct cpio_archive *a = NULL;
 	FILE *fp = NULL;
@@ -81,6 +82,7 @@ cpio_archive_output_create(const char *base_directory, const char *manifest,
 		fprintf(stderr, "ERROR: couldn't create archive for output\n");
 		return (-1);
 	}
+	cpio_archive_set_blocksize(a, block_size);
 
 	fp = fopen(manifest, "r");
 	if (fp == NULL) {
@@ -141,7 +143,8 @@ error:
 static void
 usage(void)
 {
-	printf("Usage: xcpio [-c] [-e] [-f <archive>] [-m <manifest>] [-d <directory>]\n");
+	printf("Usage: xcpio [-b <blocksize>] [-c] [-e] [-f <archive>] [-m <manifest>] [-d <directory>]\n");
+	printf("  -b <blocksize> : archive read/write block size in bytes\n");
 	printf("  -c             : create an archive\n");
 	printf("  -d <directory> : base directory for creating/extracting archives\n");
 	printf("  -e             : extract from archive\n");
@@ -160,10 +163,14 @@ main(int argc, char *argv[])
 	bool is_extract = false;
 	bool is_create = false;
 	bool is_list = false;
+	int block_size = DEFAULT_CPIO_BLOCK_SIZE;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "cd:ef:lm:")) != -1) {
+	while ((ch = getopt(argc, argv, "b:cd:ef:lm:")) != -1) {
 		switch (ch) {
+		case 'b':
+			block_size = atoi(optarg);
+			break;
 		case 'c':
 			is_create = true;
 			break;
@@ -218,10 +225,10 @@ main(int argc, char *argv[])
 
 	if (is_extract) {
 		(void) cpio_archive_extract(base_directory, archive_file,
-		    ! is_list);
+		    ! is_list, block_size);
 	} else if (is_create) {
 		(void) cpio_archive_output_create(base_directory,
-		    manifest_file, archive_file);
+		    manifest_file, archive_file, block_size);
 	} else {
 		fprintf(stderr, "ERROR: invalid internal state; need either "
 		    "create or extract\n");
