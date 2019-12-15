@@ -187,7 +187,7 @@ cpio_archive_open(struct cpio_archive *a)
 		a->fd = open(a->archive_filename, O_RDONLY);
 		break;
 	case CPIO_ARCHIVE_MODE_WRITE:
-		a->fd = open(a->archive_filename, O_WRONLY | O_CREAT, 0644);
+		a->fd = open(a->archive_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 		break;
 	default:
 		a->fd = -1;
@@ -294,6 +294,10 @@ cpio_archive_set_base_directory(struct cpio_archive *a, const char *dirname)
  * Write a file into the current archive. filename is either a
  * full path or a relative to the defined base path / current working
  * directory.
+ *
+ * TODO: symlinks/hardlinks need the destination link provided
+ *       as the file payload; that is currently definitely not
+ *       yet implemented!
  */
 int
 cpio_archive_write_file(struct cpio_archive *a, const char *filename)
@@ -308,16 +312,43 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	char *sbuf;
 	int slen;
 
-	fd = openat(a->base.fd, filename, O_RDONLY);
-	if (fd < 0) {
-		warn("open (%s)", filename);
+	/*
+	 * Note: we can't open non-regular files; so do fstatat() first.
+	 */
+	ret = fstatat(a->base.fd, filename, &sb, 0);
+	if (ret < 0) {
+		warn("fstatat (%s)", filename);
 		goto fail;
 	}
 
-	ret = fstat(fd, &sb);
-	if (ret != 0) {
-		warn("stat (%s)", filename);
-		goto fail;
+	/*
+	 * Only open the file if it's a real file.
+	 */
+	if (S_ISREG(sb.st_mode)) {
+		fd = openat(a->base.fd, filename, O_RDONLY);
+		if (fd < 0) {
+			warn("open (%s)", filename);
+			goto fail;
+		}
+
+		/*
+		 * Re-do the fstat now.
+		 */
+		ret = fstat(fd, &sb);
+		if (ret != 0) {
+			warn("stat (%s)", filename);
+			goto fail;
+		}
+	}
+
+	/*
+	 * If it's not a regular file then override the st_size
+	 * field.  Directories will need it to be a 0 length file;
+	 * later support for symlink/hardlinks will have the
+	 * destination file path as the payload.
+	 */
+	if (S_ISDIR(sb.st_mode)) {
+		sb.st_size = 0;
 	}
 
 	c = cpio_header_create(&sb, filename);
@@ -335,36 +366,38 @@ cpio_archive_write_file(struct cpio_archive *a, const char *filename)
 	}
 	free(sbuf); sbuf = NULL;
 
-	/*
-	 * Yeah yeah 1k read/write is tiny, but for this use case it's
-	 * fine.
-	 */
-	while (1) {
-		/* Note: this reads from the file we opened */
-		rret = read(fd, buf, XCPIO_WRITE_BUF_SIZE);
-		if (rret == 0) {
-			break;
-		}
-		if (rret < 0) {
-			warn("read");
-			goto fail;
-		}
-		wlen = 0;
-		while (wlen < rret) {
-			/*
-			 * Note: this writes to the underlying device
-			 * and THIS must be block sized writes!
-			 */
-			wret = cpio_archive_write_data(a, buf + wlen, rret - wlen);
-			if (wret <= 0) {
-				warn("write");
+	if (fd != -1) {
+		/*
+		 * Yeah yeah 1k read/write is tiny, but for this use case it's
+		 * fine.
+		 */
+		while (1) {
+			/* Note: this reads from the file we opened */
+			rret = read(fd, buf, XCPIO_WRITE_BUF_SIZE);
+			if (rret == 0) {
+				break;
+			}
+			if (rret < 0) {
+				warn("read");
 				goto fail;
 			}
-			wlen += wret;
+			wlen = 0;
+			while (wlen < rret) {
+				/*
+				 * Note: this writes to the underlying device
+				 * and THIS must be block sized writes!
+				 */
+				wret = cpio_archive_write_data(a, buf + wlen, rret - wlen);
+				if (wret <= 0) {
+					warn("write");
+					goto fail;
+				}
+				wlen += wret;
+			}
 		}
-	}
 
-	close(fd);
+		close(fd);
+	}
 	cpio_header_free(c);
 	return (0);
 
@@ -526,7 +559,7 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 			 * Note: this logic ONLY handles creating files for
 			 * now.
 			 * This needs to be extended to handle block/char
-			 * devices, symlinks and hardlinks.
+			 * devices, directories, symlinks and hardlinks.
 			 */
 
 			/* attempt to open a file to write to */
