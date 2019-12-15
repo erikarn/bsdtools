@@ -442,6 +442,77 @@ cpio_archive_write_files(struct cpio_archive *a)
 	return (0);
 }
 
+static int
+cpio_archive_open_destination_file(struct cpio_archive *a)
+{
+	int target_fd;
+	char *tmp_fn;
+
+	tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
+	if (tmp_fn == NULL) {
+		/* XXX TODO: log error */
+		return (-1);
+	}
+	target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT | O_TRUNC,
+	    a->read.c->st.st_mode);
+	if (target_fd < 0) {
+		warn("%s: openat() (%s)", __func__, tmp_fn);
+		free(tmp_fn);
+		return (-1);
+	}
+	free(tmp_fn);
+
+	/*
+	 * Set the file ownership.  For now don't warn;
+	 * it'll fail if you're non-root.
+	 */
+	if ((target_fd >= 0) && (fchown(target_fd, a->read.c->st.st_uid,
+	    a->read.c->st.st_gid) != 0)) {
+#if 0
+		warn("%s: fchown (%s) (%llu/%llu)",
+		    __func__,
+		    a->read.c->filename,
+		    (unsigned long long) a->read.c->st.st_uid,
+		    (unsigned long long) a->read.c->st.st_gid);
+#endif
+	}
+
+	return (target_fd);
+}
+
+/*
+ * Create a directory.
+ *
+ * Note: this doesn't (yet?) create the subdirectory paths, so the
+ * manifest has to have these in the right order!
+ */
+static int
+cpio_archive_create_destination_directory(struct cpio_archive *a)
+{
+	int ret;
+	char *tmp_fn;
+
+	tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
+	if (tmp_fn == NULL) {
+		/* XXX TODO: log error */
+		return (-1);
+	}
+
+	/* XXX TODO: this sets the mode, not the sticky bits */
+	ret = mkdirat(a->base.fd, tmp_fn, a->read.c->st.st_mode);
+	if (ret < 0) {
+		warn("%s: mkdirat '%s'", __func__, tmp_fn);
+		free(tmp_fn);
+		return (-1);
+	}
+	free(tmp_fn);
+
+	/* XXX TODO: figure out how to change the dir owner */
+
+	return (0);
+}
+
+
 /*
  * Begin reading from an archive.
  */
@@ -567,36 +638,24 @@ cpio_archive_begin_read(struct cpio_archive *a, bool do_extract)
 			 * This needs to be extended to handle block/char
 			 * devices, directories, symlinks and hardlinks.
 			 */
-
-			/* attempt to open a file to write to */
 			if (do_extract) {
-				tmp_fn = cpio_path_sanity_filter(a->read.c->filename);
-				if (tmp_fn != NULL) {
-					/* XXX TODO: mode, owner, ctime/mtime, device id, etc */
-					target_fd = openat(a->base.fd, tmp_fn, O_WRONLY | O_CREAT,
-					    a->read.c->st.st_mode);
-					if (target_fd < 0) {
-						warn("%s: openat() (%s)", __func__,
-						  tmp_fn);
-						target_fd = -1;
-					}
+				/* If it's a file then create a file */
+				if (S_ISREG(a->read.c->st.st_mode)) {
+					target_fd = cpio_archive_open_destination_file(a);
+				}
 
-					/*
-					 * Set the file ownership.  For now don't warn;
-					 * it'll fail if you're non-root.
-					 */
-					if ((target_fd >= 0) &&
-					    (fchown(target_fd, a->read.c->st.st_uid,
-					    a->read.c->st.st_gid) != 0)) {
-#if 0
-						warn("%s: fchown (%s) (%llu/%llu)",
-						    __func__,
-						    a->read.c->filename,
-						    (unsigned long long) a->read.c->st.st_uid,
-						    (unsigned long long) a->read.c->st.st_gid);
-#endif
-					}
-					free(tmp_fn);
+				/* If it's a directory then create a directory */
+				else if (S_ISDIR(a->read.c->st.st_mode)) {
+					(void) cpio_archive_create_destination_directory(a);
+					target_fd = -1;
+				} else {
+					/* Log an error; we don't handle this */
+					fprintf(stderr,
+					    "%s: unsupported mode/type for file '%s' (%o)\n",
+					    __func__,
+					    a->read.c->filename,
+					    a->read.c->st.st_mode);
+					target_fd = -1;
 				}
 			}
 		}
